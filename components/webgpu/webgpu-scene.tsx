@@ -30,7 +30,7 @@ function RotatingBox() {
   return (
     <mesh ref={meshRef}>
       <boxGeometry args={[1.35, 1.35, 1.35]} />
-      <meshStandardMaterial color="#7fd4ff" metalness={0.15} roughness={0.25} />
+      <meshStandardMaterial color="#7fff81" metalness={0.15} roughness={0.25} />
     </mesh>
   );
 }
