@@ -5,12 +5,11 @@ import { uiStyles } from './styles';
 
 export default function GameOverScreen() {
   const phase = useGameStore((s) => s.phase);
-  const score = useGameStore((s) => s.score);
-  const distance = useGameStore((s) => s.distance);
-  const turnsCompleted = useGameStore((s) => s.turnsCompleted);
   const startGame = useGameStore((s) => s.startGame);
 
   if (phase !== 'gameOver') return null;
+
+  const { distance, score, turnsCompleted } = useGameStore.getState();
 
   return (
     <Pressable onPress={startGame} style={uiStyles.overlay}>

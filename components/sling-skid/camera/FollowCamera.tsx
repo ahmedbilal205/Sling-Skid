@@ -25,7 +25,7 @@ import {
   CAMERA_TURN_MAX_FOV_LANDSCAPE,
   CAMERA_TURN_MAX_FOV_PORTRAIT,
 } from '../store/constants';
-import { getActiveHookTarget, useGameStore } from '../store/gameStore';
+import { getActiveHookTarget, getGameRuntimeState } from '../store/gameStore';
 
 const _desired = new THREE.Vector3();
 const _lookAt = new THREE.Vector3();
@@ -85,10 +85,12 @@ export default function FollowCamera() {
   const turnFrameHold = useRef(0);
   const lockedHook = useRef(new THREE.Vector3(0, 0, 0));
   const hasLockedHook = useRef(false);
+  const recoveryFrame = useRef(0);
+  const cachedRecovery = useRef({ behind: 0, height: 0, lookBack: 0 });
 
   useFrame((_, delta) => {
     const dt = Math.min(delta, 0.05);
-    const state = useGameStore.getState();
+    const state = getGameRuntimeState();
     const {
       carX,
       carZ,
@@ -274,40 +276,52 @@ export default function FollowCamera() {
     let carRecoveryBehind = 0;
     let carRecoveryHeight = 0;
     let carRecoveryLookBack = 0;
+    const canReuseRecovery = turnFrameWeight.current < 0.05 && recoveryFrame.current % 2 === 1;
+    recoveryFrame.current += 1;
 
-    for (let i = 0; i < 8; i++) {
-      scratch.position.set(
-        _desired.x - _forward.x * carRecoveryBehind,
-        _desired.y + carRecoveryHeight,
-        _desired.z - _forward.z * carRecoveryBehind,
-      );
-      scratch.up.set(0, 1, 0);
-      scratch.fov = targetFov;
-      scratch.lookAt(
-        _lookAt.x - _forward.x * carRecoveryLookBack,
-        _lookAt.y,
-        _lookAt.z - _forward.z * carRecoveryLookBack,
-      );
-      scratch.updateProjectionMatrix();
-      scratch.updateMatrixWorld();
+    if (canReuseRecovery) {
+      carRecoveryBehind = cachedRecovery.current.behind;
+      carRecoveryHeight = cachedRecovery.current.height;
+      carRecoveryLookBack = cachedRecovery.current.lookBack;
+    } else {
+      for (let i = 0; i < 8; i++) {
+        scratch.position.set(
+          _desired.x - _forward.x * carRecoveryBehind,
+          _desired.y + carRecoveryHeight,
+          _desired.z - _forward.z * carRecoveryBehind,
+        );
+        scratch.up.set(0, 1, 0);
+        scratch.fov = targetFov;
+        scratch.lookAt(
+          _lookAt.x - _forward.x * carRecoveryLookBack,
+          _lookAt.y,
+          _lookAt.z - _forward.z * carRecoveryLookBack,
+        );
+        scratch.updateProjectionMatrix();
+        scratch.updateMatrixWorld();
 
-      const carNdc = projectPointToNdc(scratch, _car, _ndc);
-      const carTopNdc = projectPointToNdc(scratch, _carTop, _ndc2);
-      const xOverflow = Math.max(Math.abs(carNdc.x), Math.abs(carTopNdc.x)) - carSafeX;
-      const bottomOverflow = -carNdc.y - carSafeBottom;
-      const topOverflow = carTopNdc.y - carSafeTop;
+        const carNdc = projectPointToNdc(scratch, _car, _ndc);
+        const carTopNdc = projectPointToNdc(scratch, _carTop, _ndc2);
+        const xOverflow = Math.max(Math.abs(carNdc.x), Math.abs(carTopNdc.x)) - carSafeX;
+        const bottomOverflow = -carNdc.y - carSafeBottom;
+        const topOverflow = carTopNdc.y - carSafeTop;
 
-      if (xOverflow <= 0 && bottomOverflow <= 0 && topOverflow <= 0 && carNdc.z <= 1.05) {
-        break;
+        if (xOverflow <= 0 && bottomOverflow <= 0 && topOverflow <= 0 && carNdc.z <= 1.05) {
+          break;
+        }
+
+        const xBoost = Math.max(0, xOverflow);
+        const bottomBoost = Math.max(0, bottomOverflow);
+        const topBoost = Math.max(0, topOverflow);
+
+        carRecoveryBehind += (portrait ? 0.95 : 0.7) + xBoost * 2.8 + bottomBoost * 4.8;
+        carRecoveryHeight += (portrait ? 0.7 : 0.45) + xBoost * 1.8 + bottomBoost * 4.2 + topBoost * 1.4;
+        carRecoveryLookBack += (portrait ? 0.45 : 0.3) + bottomBoost * 2.6;
       }
 
-      const xBoost = Math.max(0, xOverflow);
-      const bottomBoost = Math.max(0, bottomOverflow);
-      const topBoost = Math.max(0, topOverflow);
-
-      carRecoveryBehind += (portrait ? 0.95 : 0.7) + xBoost * 2.8 + bottomBoost * 4.8;
-      carRecoveryHeight += (portrait ? 0.7 : 0.45) + xBoost * 1.8 + bottomBoost * 4.2 + topBoost * 1.4;
-      carRecoveryLookBack += (portrait ? 0.45 : 0.3) + bottomBoost * 2.6;
+      cachedRecovery.current.behind = carRecoveryBehind;
+      cachedRecovery.current.height = carRecoveryHeight;
+      cachedRecovery.current.lookBack = carRecoveryLookBack;
     }
 
     _desired.addScaledVector(_forward, -carRecoveryBehind);

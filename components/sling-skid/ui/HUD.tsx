@@ -1,19 +1,32 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { useGameStore } from '../store/gameStore';
+import { useThrottledGameSnapshot } from '../store/useThrottledGameSnapshot';
 import { uiStyles } from './styles';
 
 export default function HUD() {
-  const phase = useGameStore((s) => s.phase);
-  const score = useGameStore((s) => s.score);
-  const distance = useGameStore((s) => s.distance);
-  const speed = useGameStore((s) => s.speed);
-  const combo = useGameStore((s) => s.combo);
-  const multiplier = useGameStore((s) => s.multiplier);
-  const turnsCompleted = useGameStore((s) => s.turnsCompleted);
-  const activeArcIndex = useGameStore((s) => s.activeArcIndex);
-  const lineState = useGameStore((s) => s.swing.lineState);
-  const tension = useGameStore((s) => s.swing.tension);
+  const {
+    activeArcIndex,
+    combo,
+    distance,
+    lineState,
+    multiplier,
+    phase,
+    score,
+    speedPercent,
+    tensionBucket,
+    turnsCompleted,
+  } = useThrottledGameSnapshot((s) => ({
+    activeArcIndex: s.activeArcIndex,
+    combo: s.combo,
+    distance: Math.floor(s.distance),
+    lineState: s.swing.lineState,
+    multiplier: s.multiplier,
+    phase: s.phase,
+    score: s.score,
+    speedPercent: Math.min((s.speed / 30) * 100, 100),
+    tensionBucket: Math.floor(s.swing.tension * 20),
+    turnsCompleted: s.turnsCompleted,
+  }));
 
   if (phase !== 'playing') return null;
 
@@ -24,7 +37,7 @@ export default function HUD() {
         ? 'Pulling In'
         : lineState === 'drifting'
           ? 'Drifting Wide'
-          : tension > 0.08
+          : tensionBucket > 1
             ? 'Holding Edge'
             : 'Feathering';
 
@@ -32,7 +45,7 @@ export default function HUD() {
     <View pointerEvents="none" style={styles.hud}>
       <View style={styles.topRow}>
         <View style={styles.sideItem}>
-          <Text style={[styles.value, uiStyles.shadowText]}>{Math.floor(distance)}m</Text>
+          <Text style={[styles.value, uiStyles.shadowText]}>{distance}m</Text>
           <Text style={styles.label}>Distance</Text>
         </View>
         {combo > 0 ? (
@@ -54,7 +67,7 @@ export default function HUD() {
 
       <View style={styles.bottomRow}>
         <View style={styles.speedTrack}>
-          <View style={[styles.speedBar, { width: `${Math.min((speed / 30) * 100, 100)}%` }]} />
+          <View style={[styles.speedBar, { width: `${speedPercent}%` }]} />
         </View>
       </View>
     </View>

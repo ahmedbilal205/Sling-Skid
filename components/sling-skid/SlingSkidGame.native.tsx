@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { LogBox, StyleSheet, Text, View } from 'react-native';
+import { LogBox, PixelRatio, StyleSheet, Text, View } from 'react-native';
 
 import { WebGpuFiberCanvas } from '@/components/webgpu/webgpu-fiber-canvas';
 
@@ -53,9 +53,12 @@ export default function SlingSkidGame() {
         <ErrorFallback message={error.message} />
       ) : (
         <WebGpuFiberCanvas
+          antialias={false}
           camera={{ fov: 55, near: 0.1, far: 250 }}
+          dpr={Math.min(PixelRatio.get(), 1.5)}
           onError={setError}
           onReady={() => setError(null)}
+          powerPreference="high-performance"
           style={styles.canvas}
         >
           <GameScene />

@@ -1,21 +1,24 @@
 import { StyleSheet, Text } from 'react-native';
 
-import { useGameStore } from '../store/gameStore';
+import { useThrottledGameSnapshot } from '../store/useThrottledGameSnapshot';
 import { uiStyles } from './styles';
 
 export default function SwingFeedback() {
-  const phase = useGameStore((s) => s.phase);
-  const activeArcIndex = useGameStore((s) => s.activeArcIndex);
-  const lineState = useGameStore((s) => s.swing.lineState);
-  const tension = useGameStore((s) => s.swing.tension);
-  const slip = useGameStore((s) => s.swing.slip);
+  const { activeArcIndex, lineState, phase, slipBucket, tensionBucket } =
+    useThrottledGameSnapshot((s) => ({
+      activeArcIndex: s.activeArcIndex,
+      lineState: s.swing.lineState,
+      phase: s.phase,
+      slipBucket: Math.floor(s.swing.slip * 20),
+      tensionBucket: Math.floor(s.swing.tension * 20),
+    }));
 
   if (phase !== 'playing' || activeArcIndex < 0) return null;
 
   const feedback =
     lineState === 'loading'
-      ? { text: tension > 0.72 ? 'LOADED' : 'PULL', color: '#ffd60a' }
-      : lineState === 'drifting' || slip > 0.38
+      ? { text: tensionBucket > 14 ? 'LOADED' : 'PULL', color: '#ffd60a' }
+      : lineState === 'drifting' || slipBucket > 7
         ? { text: 'DRIFT', color: '#4cc9f0' }
         : { text: 'FEATHER', color: '#ffffff' };
 

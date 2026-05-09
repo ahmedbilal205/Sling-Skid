@@ -3,7 +3,7 @@
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three/webgpu';
-import { useGameStore } from '../store/gameStore';
+import { getGameRuntimeState } from '../store/gameStore';
 import { CAR_Y } from '../store/constants';
 import type { ArcSegment } from '../store/types';
 
@@ -15,6 +15,7 @@ export default function Tether() {
   const geometry = useMemo(() => {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 10000);
     return geo;
   }, [positions]);
 
@@ -29,11 +30,15 @@ export default function Tether() {
     [],
   );
 
-  const lineObj = useMemo(() => new THREE.Line(geometry, material), [geometry, material]);
+  const lineObj = useMemo(() => {
+    const line = new THREE.Line(geometry, material);
+    line.frustumCulled = false;
+    return line;
+  }, [geometry, material]);
   const lineRef = useRef(lineObj);
 
   useFrame(() => {
-    const { swing, carX, carZ, segments } = useGameStore.getState();
+    const { swing, carX, carZ, segments } = getGameRuntimeState();
     const obj = lineRef.current;
     const mat = obj.material as THREE.LineBasicMaterial;
 
@@ -81,7 +86,6 @@ export default function Tether() {
     }
 
     posAttr.needsUpdate = true;
-    geometry.computeBoundingSphere();
   });
 
   return <primitive ref={lineRef} object={lineObj} />;

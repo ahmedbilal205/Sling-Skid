@@ -26,10 +26,13 @@ type WebGpuCameraConfig = {
 };
 
 type WebGpuFiberCanvasProps = {
+  antialias?: boolean;
   camera?: WebGpuCameraConfig;
   children: ReactNode;
+  dpr?: number;
   onError?: (error: Error) => void;
   onReady?: () => void;
+  powerPreference?: "default" | "high-performance" | "low-power";
   style?: StyleProp<ViewStyle>;
 };
 
@@ -60,18 +63,17 @@ type NativeCanvasLike = {
   width?: number;
 };
 
-function getPixelSize(size: Size) {
-  const dpr = PixelRatio.get();
+function getPixelSize(size: Size, dpr: number) {
   return {
     height: Math.max(1, Math.round(size.height * dpr)),
     width: Math.max(1, Math.round(size.width * dpr)),
   };
 }
 
-function createCanvasAdapter(context: RNCanvasContext, size: Size) {
+function createCanvasAdapter(context: RNCanvasContext, size: Size, dpr: number) {
   const nativeCanvas = context.canvas as NativeCanvasLike;
   const listeners = new Map<string, Set<(event: Event) => void>>();
-  const pixelSize = getPixelSize(size);
+  const pixelSize = getPixelSize(size, dpr);
   const canvas = {
     addEventListener(type: string, listener: (event: Event) => void) {
       const callbacks =
@@ -132,8 +134,8 @@ function createCanvasAdapter(context: RNCanvasContext, size: Size) {
   return canvas;
 }
 
-function syncCanvasSize(canvas: CanvasAdapter, size: Size) {
-  const pixelSize = getPixelSize(size);
+function syncCanvasSize(canvas: CanvasAdapter, size: Size, dpr: number) {
+  const pixelSize = getPixelSize(size, dpr);
 
   canvas.width = pixelSize.width;
   canvas.height = pixelSize.height;
@@ -157,10 +159,13 @@ function wrapRenderer(
 }
 
 export function WebGpuFiberCanvas({
+  antialias = true,
   camera,
   children,
+  dpr = PixelRatio.get(),
   onError,
   onReady,
+  powerPreference,
   style,
 }: WebGpuFiberCanvasProps) {
   const canvasRef = useRef<CanvasRef>(null);
@@ -193,9 +198,9 @@ export function WebGpuFiberCanvas({
         }
 
         const canvas =
-          canvasAdapterRef.current ?? createCanvasAdapter(context, size);
+          canvasAdapterRef.current ?? createCanvasAdapter(context, size, dpr);
         canvasAdapterRef.current = canvas;
-        syncCanvasSize(canvas, size);
+        syncCanvasSize(canvas, size, dpr);
 
         const root =
           rootRef.current ?? createRoot(canvas as unknown as HTMLCanvasElement);
@@ -206,19 +211,22 @@ export function WebGpuFiberCanvas({
           wrapRenderer(
             new THREE.WebGPURenderer({
               alpha: true,
-              antialias: true,
+              antialias,
               canvas: canvas as unknown as HTMLCanvasElement,
               context,
+              powerPreference:
+                powerPreference === "default" ? undefined : powerPreference,
             }),
             context,
           );
 
         if (!rendererRef.current) {
           await renderer.init();
+          renderer.shadowMap.enabled = true;
           rendererRef.current = renderer;
         }
 
-        renderer.setPixelRatio(PixelRatio.get());
+        renderer.setPixelRatio(dpr);
         renderer.setSize(size.width, size.height, false);
 
         await root.configure({
@@ -228,7 +236,7 @@ export function WebGpuFiberCanvas({
             near: camera?.near ?? 0.1,
             position: camera?.position ?? [0, 0, 6],
           },
-          dpr: PixelRatio.get(),
+          dpr,
           gl: renderer,
           size: {
             height: size.height,
@@ -264,7 +272,7 @@ export function WebGpuFiberCanvas({
     return () => {
       cancelled = true;
     };
-  }, [camera, children, onError, onReady, size]);
+  }, [antialias, camera, children, dpr, onError, onReady, powerPreference, size]);
 
   return (
     <WebGPUCanvas

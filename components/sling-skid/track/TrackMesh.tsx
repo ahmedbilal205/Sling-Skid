@@ -1,6 +1,6 @@
 /* eslint-disable react/no-unknown-property */
 
-import { useMemo } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three/webgpu';
 
 import { ROAD_HALF_WIDTH } from '../store/constants';
@@ -10,6 +10,7 @@ import type { TrackSegment } from '../store/types';
 const STRAIGHT_STEP = 4.5;
 const ARC_STEP = 3.2;
 const ROAD_Y = 0.08;
+const MAX_ROAD_PIECES = 1024;
 
 type RoadPiece = {
   angle: number;
@@ -111,23 +112,38 @@ function RoadStrip({
   width: number;
   y: number;
 }) {
-  return (
-    <group>
-      {pieces.map((piece) => {
-        const pos = offsetPoint(piece, offset);
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const dummy = useMemo(() => new THREE.Object3D(), []);
 
-        return (
-          <mesh
-            key={`${piece.key}-${offset}-${width}`}
-            position={[pos.x, y, pos.z]}
-            rotation-y={-piece.angle}
-          >
-            <boxGeometry args={[piece.length, 0.035, width]} />
-            <meshBasicMaterial color={color} />
-          </mesh>
-        );
-      })}
-    </group>
+  useLayoutEffect(() => {
+    const mesh = meshRef.current;
+    if (!mesh) return;
+
+    const count = Math.min(pieces.length, MAX_ROAD_PIECES);
+    mesh.count = count;
+
+    for (let index = 0; index < count; index++) {
+      const piece = pieces[index];
+      const pos = offsetPoint(piece, offset);
+      dummy.position.set(pos.x, y, pos.z);
+      dummy.rotation.set(0, -piece.angle, 0);
+      dummy.scale.set(piece.length, 1, 1);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(index, dummy.matrix);
+    }
+
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+  }, [dummy, offset, pieces, y]);
+
+  return (
+    <instancedMesh
+      ref={meshRef}
+      args={[undefined, undefined, MAX_ROAD_PIECES]}
+    >
+      <boxGeometry args={[1, 0.035, width]} />
+      <meshBasicMaterial color={color} />
+    </instancedMesh>
   );
 }
 

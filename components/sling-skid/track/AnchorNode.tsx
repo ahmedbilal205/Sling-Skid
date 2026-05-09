@@ -3,7 +3,7 @@
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three/webgpu';
-import { useGameStore } from '../store/gameStore';
+import { getGameRuntimeState, useGameStore } from '../store/gameStore';
 import type { ArcSegment } from '../store/types';
 
 function AnchorMarker({ segment, index }: { segment: ArcSegment; index: number }) {
@@ -11,15 +11,29 @@ function AnchorMarker({ segment, index }: { segment: ArcSegment; index: number }
   const discRef = useRef<THREE.Mesh>(null);
   const pulseRef = useRef<THREE.Mesh>(null);
   const beaconRef = useRef<THREE.Mesh>(null);
+  const materialsRef = useRef<{
+    beacon: THREE.MeshBasicMaterial;
+    disc: THREE.MeshStandardMaterial;
+    pulse: THREE.MeshBasicMaterial;
+  } | null>(null);
+  const colorRef = useRef('');
 
-  useFrame(() => {
-    const { swing, nextArcIndex, activeArcIndex, currentSegmentIndex } = useGameStore.getState();
+  useFrame(({ clock }) => {
+    const { swing, nextArcIndex, activeArcIndex, currentSegmentIndex } = getGameRuntimeState();
 
     const g = groupRef.current;
     const disc = discRef.current;
     const pulse = pulseRef.current;
     const beacon = beaconRef.current;
     if (!g || !disc || !pulse || !beacon) return;
+    const materials =
+      materialsRef.current ??
+      {
+        beacon: beacon.material as THREE.MeshBasicMaterial,
+        disc: disc.material as THREE.MeshStandardMaterial,
+        pulse: pulse.material as THREE.MeshBasicMaterial,
+      };
+    materialsRef.current = materials;
 
     const isUpcoming = index === nextArcIndex && index !== activeArcIndex;
     const isActive = index === activeArcIndex || index === swing.anchorIndex;
@@ -33,43 +47,46 @@ function AnchorMarker({ segment, index }: { segment: ArcSegment; index: number }
     g.visible = true;
 
     if (isActive) {
-      const discMaterial = disc.material as THREE.MeshStandardMaterial;
-      const pulseMaterial = pulse.material as THREE.MeshBasicMaterial;
-      const beaconMaterial = beacon.material as THREE.MeshBasicMaterial;
       const activeColor = swing.lineState === 'drifting' ? '#4cc9f0' : '#ffd60a';
+      if (colorRef.current !== activeColor) {
+        materials.disc.color.set(activeColor);
+        materials.disc.emissive.set(activeColor);
+        materials.pulse.color.set(activeColor);
+        materials.beacon.color.set(activeColor);
+        colorRef.current = activeColor;
+      }
 
       disc.scale.setScalar(1.15 + swing.tension * 0.45);
-      discMaterial.color.set(activeColor);
-      discMaterial.emissive.set(activeColor);
-      discMaterial.emissiveIntensity = 2.2 + swing.tension * 1.8;
-      discMaterial.opacity = 1;
+      materials.disc.emissiveIntensity = 2.2 + swing.tension * 1.8;
+      materials.disc.opacity = 1;
 
       pulse.visible = true;
       pulse.scale.setScalar(1.05 + swing.tension * 0.85);
-      pulseMaterial.color.set(activeColor);
-      pulseMaterial.opacity = 0.22 + swing.tension * 0.18;
+      materials.pulse.opacity = 0.22 + swing.tension * 0.18;
 
       beacon.visible = true;
       beacon.scale.y = 1 + swing.tension * 0.55;
-      beaconMaterial.color.set(activeColor);
-      beaconMaterial.opacity = 0.45 + swing.tension * 0.25;
+      materials.beacon.opacity = 0.45 + swing.tension * 0.25;
     } else if (isUpcoming) {
-      const t = (Math.sin(Date.now() * 0.005) + 1) * 0.5;
-      (disc.material as THREE.MeshStandardMaterial).color.set('#e53e3e');
-      (disc.material as THREE.MeshStandardMaterial).emissive.set('#e53e3e');
+      const t = (Math.sin(clock.elapsedTime * 5) + 1) * 0.5;
+      if (colorRef.current !== '#e53e3e') {
+        materials.disc.color.set('#e53e3e');
+        materials.disc.emissive.set('#e53e3e');
+        materials.pulse.color.set('#e53e3e');
+        materials.beacon.color.set('#ff4d4d');
+        colorRef.current = '#e53e3e';
+      }
       disc.scale.setScalar(1.0);
-      (disc.material as THREE.MeshStandardMaterial).emissiveIntensity = 1.5 + t;
-      (disc.material as THREE.MeshStandardMaterial).opacity = 0.95;
+      materials.disc.emissiveIntensity = 1.5 + t;
+      materials.disc.opacity = 0.95;
 
       pulse.visible = true;
       pulse.scale.setScalar(1.0 + t * 1.2);
-      (pulse.material as THREE.MeshBasicMaterial).color.set('#e53e3e');
-      (pulse.material as THREE.MeshBasicMaterial).opacity = 0.35 * (1 - t);
+      materials.pulse.opacity = 0.35 * (1 - t);
 
       beacon.visible = true;
       beacon.scale.y = 1 + t * 0.35;
-      (beacon.material as THREE.MeshBasicMaterial).color.set('#ff4d4d');
-      (beacon.material as THREE.MeshBasicMaterial).opacity = 0.45 + t * 0.25;
+      materials.beacon.opacity = 0.45 + t * 0.25;
     } else {
       g.visible = false;
     }

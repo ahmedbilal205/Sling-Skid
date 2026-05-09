@@ -3,13 +3,13 @@
 import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three/webgpu';
-import { useGameStore } from '../store/gameStore';
+import { getGameRuntimeState } from '../store/gameStore';
 
 export default function Environment() {
   const planeRef = useRef<THREE.Mesh>(null);
 
   useFrame(() => {
-    const { carX, carZ } = useGameStore.getState();
+    const { carX, carZ } = getGameRuntimeState();
     if (planeRef.current) {
       planeRef.current.position.set(carX, -0.05, carZ);
     }

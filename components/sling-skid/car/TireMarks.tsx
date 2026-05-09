@@ -3,7 +3,7 @@
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three/webgpu';
-import { useGameStore } from '../store/gameStore';
+import { getGameRuntimeState } from '../store/gameStore';
 
 const MAX_MARKS = 300;
 const MARK_INTERVAL = 0.06;
@@ -17,7 +17,7 @@ export default function TireMarks() {
   const dummy = useMemo(() => new THREE.Object3D(), []);
 
   useFrame((_, delta) => {
-    const { swing, carX, carZ, heading, phase, activeArcIndex } = useGameStore.getState();
+    const { swing, carX, carZ, heading, phase, activeArcIndex } = getGameRuntimeState();
     const mesh = meshRef.current;
     if (!mesh) return;
 

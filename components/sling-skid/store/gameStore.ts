@@ -282,7 +282,14 @@ export function getActiveHookTarget(state: Pick<GameState, 'segments' | 'swing' 
   };
 }
 
-export const useGameStore = create<GameState>((set, get) => ({
+export type GameRuntimeState = Omit<
+  GameState,
+  'startGame' | 'endGame' | 'triggerSling' | 'releaseSling' | 'tick'
+>;
+
+const PUBLISH_INTERVAL = 0.1;
+
+const initialRuntimeState: GameRuntimeState = {
   phase: 'menu',
 
   carX: 0,
@@ -306,11 +313,45 @@ export const useGameStore = create<GameState>((set, get) => ({
   nextArcIndex: 0,
   activeArcIndex: -1,
   activeArcZone: -1,
+};
 
-  startGame: () => {
-    const segments = generateInitialTrack();
-    const firstArc = getNextArcIndex(segments, 0);
-    set({
+let runtimeState: GameRuntimeState = {
+  ...initialRuntimeState,
+  swing: { ...defaultSwing },
+};
+let publishElapsed = 0;
+let publishGameSnapshot: ((snapshot: GameRuntimeState) => void) | null = null;
+
+function commitRuntimeState(patch: Partial<GameRuntimeState>, publishNow = false) {
+  runtimeState = {
+    ...runtimeState,
+    ...patch,
+  };
+
+  if (publishNow) {
+    publishElapsed = 0;
+    publishGameSnapshot?.(runtimeState);
+  }
+}
+
+function maybePublishRuntimeState(dt: number, force = false) {
+  publishElapsed += dt;
+  if (!force && publishElapsed < PUBLISH_INTERVAL) return;
+
+  publishElapsed = 0;
+  publishGameSnapshot?.(runtimeState);
+}
+
+export function getGameRuntimeState(): GameRuntimeState {
+  return runtimeState;
+}
+
+export function startGameRuntime() {
+  const segments = generateInitialTrack();
+  const firstArc = getNextArcIndex(segments, 0);
+
+  commitRuntimeState(
+    {
       phase: 'playing',
       carX: segments[0].start.x,
       carZ: segments[0].start.z,
@@ -331,29 +372,34 @@ export const useGameStore = create<GameState>((set, get) => ({
       nextArcIndex: firstArc >= 0 ? firstArc : 0,
       activeArcIndex: -1,
       activeArcZone: -1,
-    });
-  },
+    },
+    true,
+  );
+}
 
-  endGame: () => {
-    set({ phase: 'gameOver' });
-  },
+export function endGameRuntime() {
+  commitRuntimeState({ phase: 'gameOver' }, true);
+}
 
-  releaseSling: () => {
-    const state = get();
-    set({
+export function releaseSlingRuntime() {
+  commitRuntimeState(
+    {
       inputHeld: false,
       swing: {
-        ...state.swing,
+        ...runtimeState.swing,
         engaged: false,
       },
-    });
-  },
+    },
+    true,
+  );
+}
 
-  triggerSling: () => {
-    const state = get();
-    if (state.phase !== 'playing') return;
+export function triggerSlingRuntime() {
+  const state = runtimeState;
+  if (state.phase !== 'playing') return;
 
-    set({
+  commitRuntimeState(
+    {
       inputHeld: true,
       swing:
         state.activeArcIndex >= 0 &&
@@ -368,250 +414,228 @@ export const useGameStore = create<GameState>((set, get) => ({
               ...state.swing,
               engaged: state.activeArcIndex >= 0,
             },
-    });
-  },
+    },
+    true,
+  );
+}
 
-  tick: (dt: number) => {
-    const state = get();
-    if (state.phase !== 'playing') return;
+export function stepGameRuntime(dt: number) {
+  const state = runtimeState;
+  if (state.phase !== 'playing') return;
 
-    const posBefore = { x: state.carX, z: state.carZ };
-    const arcBefore = resolveArcContext(
-      posBefore,
-      state.segments,
-      state.currentSegmentIndex,
-      state.activeArcIndex >= 0 ? state.activeArcIndex : state.swing.anchorIndex,
-    );
+  const posBefore = { x: state.carX, z: state.carZ };
+  const arcBefore = resolveArcContext(
+    posBefore,
+    state.segments,
+    state.currentSegmentIndex,
+    state.activeArcIndex >= 0 ? state.activeArcIndex : state.swing.anchorIndex,
+  );
 
-    const newPaceSpeed = Math.min(state.paceSpeed + SPEED_INCREMENT * dt, MAX_SPEED);
-    let newScore = state.score;
-    let newCombo = state.combo;
-    let newMultiplier = state.multiplier;
-    let newTurns = state.turnsCompleted;
-    let newX = state.carX;
-    let newZ = state.carZ;
-    let newHeading = state.heading;
-    let newSwing = { ...state.swing };
-    let newVelX = state.velX;
-    let newVelZ = state.velZ;
+  const newPaceSpeed = Math.min(state.paceSpeed + SPEED_INCREMENT * dt, MAX_SPEED);
+  let newScore = state.score;
+  let newCombo = state.combo;
+  let newMultiplier = state.multiplier;
+  let newTurns = state.turnsCompleted;
+  let newX = state.carX;
+  let newZ = state.carZ;
+  let newHeading = state.heading;
+  let newSwing = { ...state.swing };
+  let newVelX = state.velX;
+  let newVelZ = state.velZ;
 
-    if (newSwing.anchorIndex !== arcBefore.activeArcIndex) {
-      if (newSwing.anchorIndex >= 0 && newSwing.zoneProgress > 0.45) {
-        const turnScore = scoreTurn(newCombo, newSwing);
-        newScore += turnScore.scoreAdd;
-        newCombo = turnScore.combo;
-        newMultiplier = turnScore.multiplier;
-        newTurns += 1;
-        newSwing = resetSwing(turnScore.quality);
-      }
-
-      if (arcBefore.activeArcIndex >= 0) {
-        newSwing = {
-          ...resetSwing(newSwing.quality),
-          anchorIndex: arcBefore.activeArcIndex,
-          engaged: state.inputHeld,
-          regrabs: state.inputHeld ? 1 : 0,
-        };
-      }
+  if (newSwing.anchorIndex !== arcBefore.activeArcIndex) {
+    if (newSwing.anchorIndex >= 0 && newSwing.zoneProgress > 0.45) {
+      const turnScore = scoreTurn(newCombo, newSwing);
+      newScore += turnScore.scoreAdd;
+      newCombo = turnScore.combo;
+      newMultiplier = turnScore.multiplier;
+      newTurns += 1;
+      newSwing = resetSwing(turnScore.quality);
     }
-
-    const guideSegment = arcBefore.activeArcIndex >= 0
-      ? (state.segments[arcBefore.activeArcIndex] as ArcSegment)
-      : state.segments[state.currentSegmentIndex];
-    const guideHeading =
-      arcBefore.activeZone?.tangentHeading ?? guideHeadingForSegment(guideSegment, posBefore);
-    const guideX = Math.cos(guideHeading);
-    const guideZ = Math.sin(guideHeading);
-    const speedBefore = Math.hypot(newVelX, newVelZ) || state.paceSpeed;
-    const assistStrength = arcBefore.activeArcIndex >= 0 ? ARC_GUIDE_ASSIST : STRAIGHT_GUIDE_ASSIST;
-
-    newVelX += (guideX * speedBefore - newVelX) * assistStrength * dt;
-    newVelZ += (guideZ * speedBefore - newVelZ) * assistStrength * dt;
-
-    const tensionTarget = arcBefore.activeArcIndex >= 0 && state.inputHeld ? 1 : 0;
-    const tensionRate = tensionTarget > newSwing.tension ? TENSION_RISE_RATE : TENSION_DROP_RATE;
-    newSwing.tension = moveTowards(newSwing.tension, tensionTarget, tensionRate * dt);
-    newSwing.engaged = arcBefore.activeArcIndex >= 0 && state.inputHeld;
 
     if (arcBefore.activeArcIndex >= 0) {
-      const arc = state.segments[arcBefore.activeArcIndex] as ArcSegment;
-      const dx = state.carX - arc.center.x;
-      const dz = state.carZ - arc.center.z;
-      const dist = Math.hypot(dx, dz) || 1e-6;
-      const radialX = dx / dist;
-      const radialZ = dz / dist;
-      const tangentHeadingNow = arcBefore.activeZone?.tangentHeading ?? guideHeading;
-      const tangentX = Math.cos(tangentHeadingNow);
-      const tangentZ = Math.sin(tangentHeadingNow);
-      const radialError = dist - arc.radius;
-      const tension = newSwing.tension;
-
-      if (newSwing.engaged) {
-        const inwardForce = (TURN_PULL_FORCE + Math.max(radialError, -1.5) * TURN_RADIUS_PULL) * tension;
-        newVelX += -radialX * inwardForce * dt;
-        newVelZ += -radialZ * inwardForce * dt;
-        newVelX += (tangentX * Math.max(speedBefore, newPaceSpeed) - newVelX) * TURN_ALIGN_FORCE * tension * dt;
-        newVelZ += (tangentZ * Math.max(speedBefore, newPaceSpeed) - newVelZ) * TURN_ALIGN_FORCE * tension * dt;
-      } else {
-        newVelX += radialX * TURN_RELEASE_FLOAT * dt;
-        newVelZ += radialZ * TURN_RELEASE_FLOAT * dt;
-      }
+      newSwing = {
+        ...resetSwing(newSwing.quality),
+        anchorIndex: arcBefore.activeArcIndex,
+        engaged: state.inputHeld,
+        regrabs: state.inputHeld ? 1 : 0,
+      };
     }
+  }
 
-    const postForceSpeed = Math.max(Math.hypot(newVelX, newVelZ), 0.001);
-    const desiredSpeed = newPaceSpeed * (1 + newSwing.tension * 0.08);
-    const speedBlend = clamp01(dt * (arcBefore.activeArcIndex >= 0 ? 2.4 : 4.8));
-    const nextSpeed = postForceSpeed + (desiredSpeed - postForceSpeed) * speedBlend;
-    newVelX = (newVelX / postForceSpeed) * nextSpeed;
-    newVelZ = (newVelZ / postForceSpeed) * nextSpeed;
+  const guideSegment = arcBefore.activeArcIndex >= 0
+    ? (state.segments[arcBefore.activeArcIndex] as ArcSegment)
+    : state.segments[state.currentSegmentIndex];
+  const guideHeading =
+    arcBefore.activeZone?.tangentHeading ?? guideHeadingForSegment(guideSegment, posBefore);
+  const guideX = Math.cos(guideHeading);
+  const guideZ = Math.sin(guideHeading);
+  const speedBefore = Math.hypot(newVelX, newVelZ) || state.paceSpeed;
+  const assistStrength = arcBefore.activeArcIndex >= 0 ? ARC_GUIDE_ASSIST : STRAIGHT_GUIDE_ASSIST;
 
-    newX += newVelX * dt;
-    newZ += newVelZ * dt;
+  newVelX += (guideX * speedBefore - newVelX) * assistStrength * dt;
+  newVelZ += (guideZ * speedBefore - newVelZ) * assistStrength * dt;
 
-    const velocityHeading = Math.atan2(newVelZ, newVelX);
-    newHeading += normalizeAngle(velocityHeading - newHeading) * clamp01(HEADING_SMOOTHING * dt);
-    const newSpeed = Math.hypot(newVelX, newVelZ);
-    const newDistance = state.distance + newSpeed * dt;
+  const tensionTarget = arcBefore.activeArcIndex >= 0 && state.inputHeld ? 1 : 0;
+  const tensionRate = tensionTarget > newSwing.tension ? TENSION_RISE_RATE : TENSION_DROP_RATE;
+  newSwing.tension = moveTowards(newSwing.tension, tensionTarget, tensionRate * dt);
+  newSwing.engaged = arcBefore.activeArcIndex >= 0 && state.inputHeld;
 
-    const onRoad = isOnRoad(
-      { x: newX, z: newZ },
-      state.segments,
-      state.currentSegmentIndex,
-      ROAD_HALF_WIDTH +
-        BOUNDARY_TOLERANCE +
-        (arcBefore.activeArcIndex >= 0 ? OFFROAD_GRACE_BONUS * (0.45 + newSwing.tension * 0.55) : 0),
-    );
+  if (arcBefore.activeArcIndex >= 0) {
+    const arc = state.segments[arcBefore.activeArcIndex] as ArcSegment;
+    const dx = state.carX - arc.center.x;
+    const dz = state.carZ - arc.center.z;
+    const dist = Math.hypot(dx, dz) || 1e-6;
+    const radialX = dx / dist;
+    const radialZ = dz / dist;
+    const tangentHeadingNow = arcBefore.activeZone?.tangentHeading ?? guideHeading;
+    const tangentX = Math.cos(tangentHeadingNow);
+    const tangentZ = Math.sin(tangentHeadingNow);
+    const radialError = dist - arc.radius;
+    const tension = newSwing.tension;
 
-    if (!onRoad) {
-      set({ phase: 'gameOver', carX: newX, carZ: newZ, velX: newVelX, velZ: newVelZ });
-      return;
-    }
-
-    let newSegIdx = state.currentSegmentIndex;
-    while (newSegIdx < state.segments.length - 1) {
-      const nextSeg = state.segments[newSegIdx + 1];
-      const dx = newX - nextSeg.start.x;
-      const dz = newZ - nextSeg.start.z;
-      const fwd_x = Math.cos(nextSeg.startHeading);
-      const fwd_z = Math.sin(nextSeg.startHeading);
-      const dot = dx * fwd_x + dz * fwd_z;
-      if (dot > 0) {
-        newSegIdx++;
-      } else {
-        break;
-      }
-    }
-
-    let newSegments = state.segments;
-    const remaining = newSegments.length - newSegIdx;
-    if (remaining < 15) {
-      const toAdd: TrackSegment[] = [];
-      let last = newSegments[newSegments.length - 1];
-      const count = 15 - remaining + 2;
-      for (let i = 0; i < count; i++) {
-        last = generateNextSegment(last, newDistance);
-        toAdd.push(last);
-      }
-      newSegments = [...newSegments, ...toAdd];
-    }
-
-    const arcAfter = resolveArcContext(
-      { x: newX, z: newZ },
-      newSegments,
-      newSegIdx,
-      arcBefore.activeArcIndex >= 0 ? arcBefore.activeArcIndex : newSwing.anchorIndex,
-    );
-
-    if (arcAfter.activeArcIndex >= 0) {
-      if (newSwing.anchorIndex !== arcAfter.activeArcIndex) {
-        newSwing = {
-          ...resetSwing(newSwing.quality),
-          anchorIndex: arcAfter.activeArcIndex,
-          engaged: state.inputHeld,
-          regrabs: state.inputHeld ? 1 : 0,
-        };
-      }
-
-      newSwing.zoneProgress = Math.max(newSwing.zoneProgress, arcAfter.activeZone?.progress ?? 0);
-      newSwing.radialError = arcAfter.activeZone?.radialError ?? 0;
-      newSwing.turnTime += dt;
-      newSwing.turnControl += newSwing.tension * dt;
-      newSwing.wideTime +=
-        Math.max(0, Math.abs(newSwing.radialError) - ROAD_HALF_WIDTH * 0.25) /
-        (ROAD_HALF_WIDTH + ARC_ZONE_RADIAL_SLACK) *
-        dt;
-      newSwing.slip = clamp01(
-        Math.abs(newSwing.radialError) / (ROAD_HALF_WIDTH + 2) + (1 - newSwing.tension) * 0.28,
-      );
-      newSwing.lineState = newSwing.engaged
-        ? 'loading'
-        : newSwing.slip > 0.32
-          ? 'drifting'
-          : 'neutral';
+    if (newSwing.engaged) {
+      const inwardForce = (TURN_PULL_FORCE + Math.max(radialError, -1.5) * TURN_RADIUS_PULL) * tension;
+      newVelX += -radialX * inwardForce * dt;
+      newVelZ += -radialZ * inwardForce * dt;
+      newVelX += (tangentX * Math.max(speedBefore, newPaceSpeed) - newVelX) * TURN_ALIGN_FORCE * tension * dt;
+      newVelZ += (tangentZ * Math.max(speedBefore, newPaceSpeed) - newVelZ) * TURN_ALIGN_FORCE * tension * dt;
     } else {
-      if (newSwing.anchorIndex >= 0 && newSwing.zoneProgress > 0.45) {
-        const turnScore = scoreTurn(newCombo, newSwing);
-        newScore += turnScore.scoreAdd;
-        newCombo = turnScore.combo;
-        newMultiplier = turnScore.multiplier;
-        newTurns += 1;
-        newSwing = resetSwing(turnScore.quality);
-      } else {
-        newSwing = {
-          ...newSwing,
-          engaged: false,
-          radialError: 0,
-          slip: Math.max(0, newSwing.slip - dt * 2.5),
-          lineState: 'neutral' as SwingLineState,
-          anchorIndex: state.inputHeld ? newSwing.anchorIndex : -1,
-        };
-      }
+      newVelX += radialX * TURN_RELEASE_FLOAT * dt;
+      newVelZ += radialZ * TURN_RELEASE_FLOAT * dt;
+    }
+  }
+
+  const postForceSpeed = Math.max(Math.hypot(newVelX, newVelZ), 0.001);
+  const desiredSpeed = newPaceSpeed * (1 + newSwing.tension * 0.08);
+  const speedBlend = clamp01(dt * (arcBefore.activeArcIndex >= 0 ? 2.4 : 4.8));
+  const nextSpeed = postForceSpeed + (desiredSpeed - postForceSpeed) * speedBlend;
+  newVelX = (newVelX / postForceSpeed) * nextSpeed;
+  newVelZ = (newVelZ / postForceSpeed) * nextSpeed;
+
+  newX += newVelX * dt;
+  newZ += newVelZ * dt;
+
+  const velocityHeading = Math.atan2(newVelZ, newVelX);
+  newHeading += normalizeAngle(velocityHeading - newHeading) * clamp01(HEADING_SMOOTHING * dt);
+  const newSpeed = Math.hypot(newVelX, newVelZ);
+  const newDistance = state.distance + newSpeed * dt;
+
+  const onRoad = isOnRoad(
+    { x: newX, z: newZ },
+    state.segments,
+    state.currentSegmentIndex,
+    ROAD_HALF_WIDTH +
+      BOUNDARY_TOLERANCE +
+      (arcBefore.activeArcIndex >= 0 ? OFFROAD_GRACE_BONUS * (0.45 + newSwing.tension * 0.55) : 0),
+  );
+
+  if (!onRoad) {
+    commitRuntimeState({ phase: 'gameOver', carX: newX, carZ: newZ, velX: newVelX, velZ: newVelZ }, true);
+    return;
+  }
+
+  let newSegIdx = state.currentSegmentIndex;
+  while (newSegIdx < state.segments.length - 1) {
+    const nextSeg = state.segments[newSegIdx + 1];
+    const dx = newX - nextSeg.start.x;
+    const dz = newZ - nextSeg.start.z;
+    const fwd_x = Math.cos(nextSeg.startHeading);
+    const fwd_z = Math.sin(nextSeg.startHeading);
+    const dot = dx * fwd_x + dz * fwd_z;
+    if (dot > 0) {
+      newSegIdx++;
+    } else {
+      break;
+    }
+  }
+
+  let newSegments = state.segments;
+  const remaining = newSegments.length - newSegIdx;
+  if (remaining < 15) {
+    const toAdd: TrackSegment[] = [];
+    let last = newSegments[newSegments.length - 1];
+    const count = 15 - remaining + 2;
+    for (let i = 0; i < count; i++) {
+      last = generateNextSegment(last, newDistance);
+      toAdd.push(last);
+    }
+    newSegments = [...newSegments, ...toAdd];
+  }
+
+  const arcAfter = resolveArcContext(
+    { x: newX, z: newZ },
+    newSegments,
+    newSegIdx,
+    arcBefore.activeArcIndex >= 0 ? arcBefore.activeArcIndex : newSwing.anchorIndex,
+  );
+
+  if (arcAfter.activeArcIndex >= 0) {
+    if (newSwing.anchorIndex !== arcAfter.activeArcIndex) {
+      newSwing = {
+        ...resetSwing(newSwing.quality),
+        anchorIndex: arcAfter.activeArcIndex,
+        engaged: state.inputHeld,
+        regrabs: state.inputHeld ? 1 : 0,
+      };
     }
 
-    if (arcAfter.activeArcIndex < 0 && newSwing.anchorIndex < 0) {
-      newSwing.tension = Math.max(0, newSwing.tension - TENSION_DROP_RATE * dt);
+    newSwing.zoneProgress = Math.max(newSwing.zoneProgress, arcAfter.activeZone?.progress ?? 0);
+    newSwing.radialError = arcAfter.activeZone?.radialError ?? 0;
+    newSwing.turnTime += dt;
+    newSwing.turnControl += newSwing.tension * dt;
+    newSwing.wideTime +=
+      Math.max(0, Math.abs(newSwing.radialError) - ROAD_HALF_WIDTH * 0.25) /
+      (ROAD_HALF_WIDTH + ARC_ZONE_RADIAL_SLACK) *
+      dt;
+    newSwing.slip = clamp01(
+      Math.abs(newSwing.radialError) / (ROAD_HALF_WIDTH + 2) + (1 - newSwing.tension) * 0.28,
+    );
+    newSwing.lineState = newSwing.engaged
+      ? 'loading'
+      : newSwing.slip > 0.32
+        ? 'drifting'
+        : 'neutral';
+  } else {
+    if (newSwing.anchorIndex >= 0 && newSwing.zoneProgress > 0.45) {
+      const turnScore = scoreTurn(newCombo, newSwing);
+      newScore += turnScore.scoreAdd;
+      newCombo = turnScore.combo;
+      newMultiplier = turnScore.multiplier;
+      newTurns += 1;
+      newSwing = resetSwing(turnScore.quality);
+    } else {
+      newSwing = {
+        ...newSwing,
+        engaged: false,
+        radialError: 0,
+        slip: Math.max(0, newSwing.slip - dt * 2.5),
+        lineState: 'neutral' as SwingLineState,
+        anchorIndex: state.inputHeld ? newSwing.anchorIndex : -1,
+      };
     }
+  }
 
-    if (!state.inputHeld && arcAfter.activeArcIndex < 0 && newSegIdx > 5) {
-      const pruneCount = newSegIdx - 3;
-      newSegments = newSegments.slice(pruneCount);
-      newSegIdx -= pruneCount;
-      if (newSwing.anchorIndex >= 0) {
-        newSwing.anchorIndex = Math.max(-1, newSwing.anchorIndex - pruneCount);
-      }
-      const adjustedActive = arcAfter.activeArcIndex >= 0 ? arcAfter.activeArcIndex - pruneCount : -1;
-      const adjustedNext = arcAfter.nextArcIndex >= 0 ? arcAfter.nextArcIndex - pruneCount : -1;
+  if (arcAfter.activeArcIndex < 0 && newSwing.anchorIndex < 0) {
+    newSwing.tension = Math.max(0, newSwing.tension - TENSION_DROP_RATE * dt);
+  }
 
-      set({
-        carX: newX,
-        carZ: newZ,
-        heading: newHeading,
-        velX: newVelX,
-        velZ: newVelZ,
-        speed: newSpeed,
-        paceSpeed: newPaceSpeed,
-        distance: newDistance,
-        score: newScore + Math.floor(newSpeed * dt * (0.35 + newSwing.tension * 1.35)),
-        combo: newCombo,
-        multiplier: newMultiplier,
-        swing: newSwing,
-        currentSegmentIndex: newSegIdx,
-        nextArcIndex: adjustedNext,
-        activeArcIndex: adjustedActive,
-        activeArcZone: adjustedActive >= 0 ? arcAfter.activeZone?.progress ?? 0 : -1,
-        segments: newSegments,
-        turnsCompleted: newTurns,
-      });
-      return;
+  if (!state.inputHeld && arcAfter.activeArcIndex < 0 && newSegIdx > 5) {
+    const pruneCount = newSegIdx - 3;
+    newSegments = newSegments.slice(pruneCount);
+    newSegIdx -= pruneCount;
+    if (newSwing.anchorIndex >= 0) {
+      newSwing.anchorIndex = Math.max(-1, newSwing.anchorIndex - pruneCount);
     }
+    const adjustedActive = arcAfter.activeArcIndex >= 0 ? arcAfter.activeArcIndex - pruneCount : -1;
+    const adjustedNext = arcAfter.nextArcIndex >= 0 ? arcAfter.nextArcIndex - pruneCount : -1;
 
-    set({
+    commitRuntimeState({
       carX: newX,
       carZ: newZ,
       heading: newHeading,
       velX: newVelX,
       velZ: newVelZ,
-      inputHeld: state.inputHeld,
       speed: newSpeed,
       paceSpeed: newPaceSpeed,
       distance: newDistance,
@@ -620,11 +644,66 @@ export const useGameStore = create<GameState>((set, get) => ({
       multiplier: newMultiplier,
       swing: newSwing,
       currentSegmentIndex: newSegIdx,
-      nextArcIndex: arcAfter.nextArcIndex,
-      activeArcIndex: arcAfter.activeArcIndex,
-      activeArcZone: arcAfter.activeArcIndex >= 0 ? arcAfter.activeZone?.progress ?? 0 : -1,
+      nextArcIndex: adjustedNext,
+      activeArcIndex: adjustedActive,
+      activeArcZone: adjustedActive >= 0 ? arcAfter.activeZone?.progress ?? 0 : -1,
       segments: newSegments,
       turnsCompleted: newTurns,
     });
+    maybePublishRuntimeState(dt, true);
+    return;
+  }
+
+  commitRuntimeState({
+    carX: newX,
+    carZ: newZ,
+    heading: newHeading,
+    velX: newVelX,
+    velZ: newVelZ,
+    inputHeld: state.inputHeld,
+    speed: newSpeed,
+    paceSpeed: newPaceSpeed,
+    distance: newDistance,
+    score: newScore + Math.floor(newSpeed * dt * (0.35 + newSwing.tension * 1.35)),
+    combo: newCombo,
+    multiplier: newMultiplier,
+    swing: newSwing,
+    currentSegmentIndex: newSegIdx,
+    nextArcIndex: arcAfter.nextArcIndex,
+    activeArcIndex: arcAfter.activeArcIndex,
+    activeArcZone: arcAfter.activeArcIndex >= 0 ? arcAfter.activeZone?.progress ?? 0 : -1,
+    segments: newSegments,
+    turnsCompleted: newTurns,
+  });
+  maybePublishRuntimeState(dt, newSegIdx !== state.currentSegmentIndex || newSegments !== state.segments);
+}
+
+export const useGameStore = create<GameState>((set) => ({
+  ...runtimeState,
+
+  startGame: () => {
+    startGameRuntime();
+  },
+
+  endGame: () => {
+    endGameRuntime();
+  },
+
+  releaseSling: () => {
+    releaseSlingRuntime();
+  },
+
+  triggerSling: () => {
+    triggerSlingRuntime();
+  },
+
+  tick: (dt: number) => {
+    stepGameRuntime(dt);
   },
 }));
+
+publishGameSnapshot = (snapshot) => {
+  useGameStore.setState({
+    ...snapshot,
+  });
+};

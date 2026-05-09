@@ -3,7 +3,7 @@
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three/webgpu';
-import { useGameStore } from '../store/gameStore';
+import { getGameRuntimeState } from '../store/gameStore';
 
 const PARTICLE_COUNT = 30;
 const LIFETIME = 0.6;
@@ -29,7 +29,7 @@ export default function SlingParticles() {
   );
 
   useFrame((_, delta) => {
-    const { swing, carX, carZ, velX, velZ } = useGameStore.getState();
+    const { swing, carX, carZ, velX, velZ } = getGameRuntimeState();
     const mesh = meshRef.current;
     const particles = particlesRef.current;
     if (!mesh) return;
@@ -72,8 +72,10 @@ export default function SlingParticles() {
       count++;
     }
 
+    if (count > 0) {
+      mesh.instanceMatrix.needsUpdate = true;
+    }
     mesh.count = count;
-    mesh.instanceMatrix.needsUpdate = true;
   });
 
   return (
