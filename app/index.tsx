@@ -1,7 +1,5 @@
-/* eslint-disable import/no-unresolved */
-
-import MinimalWebGpuDemo from '@/components/webgpu/minimal-webgpu-demo';
+import SlingSkidGame from '@/components/sling-skid/SlingSkidGame';
 
 export default function HomeScreen() {
-  return <MinimalWebGpuDemo />;
+  return <SlingSkidGame />;
 }

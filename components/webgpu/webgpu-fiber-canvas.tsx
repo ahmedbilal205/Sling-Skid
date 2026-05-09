@@ -18,7 +18,15 @@ type Size = {
   width: number;
 };
 
+type WebGpuCameraConfig = {
+  far?: number;
+  fov?: number;
+  near?: number;
+  position?: [number, number, number];
+};
+
 type WebGpuFiberCanvasProps = {
+  camera?: WebGpuCameraConfig;
   children: ReactNode;
   onError?: (error: Error) => void;
   onReady?: () => void;
@@ -149,6 +157,7 @@ function wrapRenderer(
 }
 
 export function WebGpuFiberCanvas({
+  camera,
   children,
   onError,
   onReady,
@@ -213,7 +222,12 @@ export function WebGpuFiberCanvas({
         renderer.setSize(size.width, size.height, false);
 
         await root.configure({
-          camera: { fov: 64, position: [0, 0, 6] },
+          camera: {
+            far: camera?.far ?? 1000,
+            fov: camera?.fov ?? 64,
+            near: camera?.near ?? 0.1,
+            position: camera?.position ?? [0, 0, 6],
+          },
           dpr: PixelRatio.get(),
           gl: renderer,
           size: {
@@ -250,7 +264,7 @@ export function WebGpuFiberCanvas({
     return () => {
       cancelled = true;
     };
-  }, [children, onError, onReady, size]);
+  }, [camera, children, onError, onReady, size]);
 
   return (
     <WebGPUCanvas
