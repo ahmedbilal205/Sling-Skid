@@ -7,6 +7,8 @@ const reactThreeFiberEntry = path.resolve(
   'node_modules/@react-three/fiber/dist/react-three-fiber.cjs.js'
 );
 
+config.resolver.assetExts.push('glb');
+
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (moduleName === 'three') {
     return context.resolveRequest(context, 'three/webgpu', platform);
