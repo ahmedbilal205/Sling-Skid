@@ -1,13 +1,16 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useThrottledGameSnapshot } from '../store/useThrottledGameSnapshot';
 import { uiStyles } from './styles';
 
 export default function HUD() {
+  const insets = useSafeAreaInsets();
   const {
     activeArcIndex,
     combo,
     distance,
+    hasPulledIn,
     lineState,
     multiplier,
     phase,
@@ -19,6 +22,7 @@ export default function HUD() {
     activeArcIndex: s.activeArcIndex,
     combo: s.combo,
     distance: Math.floor(s.distance),
+    hasPulledIn: s.hasPulledIn,
     lineState: s.swing.lineState,
     multiplier: s.multiplier,
     phase: s.phase,
@@ -42,7 +46,10 @@ export default function HUD() {
             : 'Feathering';
 
   return (
-    <View pointerEvents="none" style={styles.hud}>
+    <View
+      pointerEvents="none"
+      style={[styles.hud, { paddingTop: insets.top + 14 }]}
+    >
       <View style={styles.topRow}>
         <View style={styles.sideItem}>
           <Text style={[styles.value, uiStyles.shadowText]}>{distance}m</Text>
@@ -59,13 +66,13 @@ export default function HUD() {
         </View>
       </View>
 
-      {turnsCompleted < 3 ? (
+      {!hasPulledIn && turnsCompleted < 3 ? (
         <Text style={[styles.tapHint, uiStyles.shadowText]}>HOLD to pull in - RELEASE to float wide</Text>
       ) : null}
 
       {lineReadout ? <Text style={[styles.lineReadout, uiStyles.shadowText]}>{lineReadout}</Text> : null}
 
-      <View style={styles.bottomRow}>
+      <View style={[styles.bottomRow, { bottom: insets.bottom + 12 }]}>
         <View style={styles.speedTrack}>
           <View style={[styles.speedBar, { width: `${speedPercent}%` }]} />
         </View>
@@ -76,7 +83,6 @@ export default function HUD() {
 
 const styles = StyleSheet.create({
   bottomRow: {
-    bottom: 12,
     left: 14,
     position: 'absolute',
     right: 14,
@@ -96,7 +102,6 @@ const styles = StyleSheet.create({
   hud: {
     ...StyleSheet.absoluteFillObject,
     paddingHorizontal: 14,
-    paddingTop: 14,
     zIndex: 5,
   },
   label: {

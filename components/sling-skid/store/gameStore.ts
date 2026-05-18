@@ -246,6 +246,7 @@ export interface GameState {
   velZ: number;
 
   inputHeld: boolean;
+  hasPulledIn: boolean;
   speed: number;
   paceSpeed: number;
   distance: number;
@@ -299,6 +300,7 @@ const initialRuntimeState: GameRuntimeState = {
   velZ: 0,
 
   inputHeld: false,
+  hasPulledIn: false,
   speed: INITIAL_SPEED,
   paceSpeed: INITIAL_SPEED,
   distance: 0,
@@ -359,6 +361,7 @@ export function startGameRuntime() {
       velX: Math.cos(segments[0].startHeading) * INITIAL_SPEED,
       velZ: Math.sin(segments[0].startHeading) * INITIAL_SPEED,
       inputHeld: false,
+      hasPulledIn: false,
       speed: INITIAL_SPEED,
       paceSpeed: INITIAL_SPEED,
       distance: 0,
@@ -401,6 +404,7 @@ export function triggerSlingRuntime() {
   commitRuntimeState(
     {
       inputHeld: true,
+      hasPulledIn: state.hasPulledIn || state.activeArcIndex >= 0,
       swing:
         state.activeArcIndex >= 0 &&
         state.swing.anchorIndex === state.activeArcIndex &&
@@ -638,6 +642,7 @@ export function stepGameRuntime(dt: number) {
       velZ: newVelZ,
       speed: newSpeed,
       paceSpeed: newPaceSpeed,
+      hasPulledIn: state.hasPulledIn || newSwing.engaged,
       distance: newDistance,
       score: newScore + Math.floor(newSpeed * dt * (0.35 + newSwing.tension * 1.35)),
       combo: newCombo,
@@ -661,6 +666,7 @@ export function stepGameRuntime(dt: number) {
     velX: newVelX,
     velZ: newVelZ,
     inputHeld: state.inputHeld,
+    hasPulledIn: state.hasPulledIn || newSwing.engaged,
     speed: newSpeed,
     paceSpeed: newPaceSpeed,
     distance: newDistance,
