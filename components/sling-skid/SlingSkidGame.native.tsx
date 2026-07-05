@@ -55,7 +55,7 @@ export default function SlingSkidGame() {
         <WebGpuFiberCanvas
           antialias={false}
           camera={{ fov: 55, near: 0.1, far: 250 }}
-          dpr={Math.min(PixelRatio.get(), 1.5)}
+          dpr={Math.min(PixelRatio.get(), 2)}
           onError={setError}
           onReady={() => setError(null)}
           powerPreference="high-performance"

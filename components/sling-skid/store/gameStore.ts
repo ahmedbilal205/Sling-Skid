@@ -30,6 +30,7 @@ import {
   TENSION_DROP_RATE,
   HEADING_SMOOTHING,
   OFFROAD_GRACE_BONUS,
+  CAR_ROD_COLLISION_ALLOWANCE,
 } from './constants';
 import { generateInitialTrack, generateNextSegment, isOnRoad } from '../track/trackGenerator';
 
@@ -125,7 +126,7 @@ function assessArcZone(pos: Vec2, arc: ArcSegment): ArcZoneState | null {
   const inApproach =
     along >= -ARC_CONTROL_LEAD &&
     along < 0.8 &&
-    Math.abs(lateral) <= ROAD_HALF_WIDTH + 2.6;
+    Math.abs(lateral) <= ROAD_HALF_WIDTH + 2.6 + CAR_ROD_COLLISION_ALLOWANCE;
   if (inApproach) {
     return {
       progress: clamp01((along + ARC_CONTROL_LEAD) / totalLen),
@@ -138,7 +139,7 @@ function assessArcZone(pos: Vec2, arc: ArcSegment): ArcZoneState | null {
   const inCorner =
     turnAngle >= -0.08 &&
     turnAngle <= arc.sweepAngle + exitAngleBuffer &&
-    Math.abs(radialError) <= ROAD_HALF_WIDTH + ARC_ZONE_RADIAL_SLACK;
+    Math.abs(radialError) <= ROAD_HALF_WIDTH + ARC_ZONE_RADIAL_SLACK + CAR_ROD_COLLISION_ALLOWANCE;
 
   if (!inCorner) return null;
 

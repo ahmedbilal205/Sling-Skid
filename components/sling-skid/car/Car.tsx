@@ -8,13 +8,23 @@ import * as THREE from 'three/webgpu';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import policeCarModelNative from '../../../assets/models/police_car.native.glb';
+import policeCarTextureNative from '../../../assets/models/police_car.texture.jpg';
 import { getGameRuntimeState, stepGameRuntime } from '../store/gameStore';
-import { CAR_Y } from '../store/constants';
+import { CAR_Y, POLICE_CAR_NATIVE_SCALE, POLICE_CAR_WEB_SCALE } from '../store/constants';
 
 const POLICE_CAR_MODEL_WEB_PATH = '/models/police_car.glb';
 const DRACO_DECODER_PATH = '/draco/gltf/';
-const POLICE_CAR_SCALE = 0.42;
 const POLICE_CAR_MODEL_ROTATION_Y = -Math.PI / 2;
+
+async function createNativeImageBitmap(uri: string) {
+  try {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    return await createImageBitmap(blob);
+  } catch {
+    return await createImageBitmap(uri as unknown as Blob);
+  }
+}
 
 async function getPoliceCarModelUris() {
   if (Platform.OS === 'web') {
@@ -26,29 +36,89 @@ async function getPoliceCarModelUris() {
   return [asset.uri, asset.localUri].filter((uri): uri is string => Boolean(uri));
 }
 
-function preparePoliceCarScene(scene: THREE.Group) {
+async function loadPoliceCarTexture() {
+  if (Platform.OS === 'web') {
+    return null;
+  }
+
+  try {
+    const asset = Asset.fromModule(policeCarTextureNative);
+    await asset.downloadAsync();
+
+    const uri = asset.localUri ?? asset.uri;
+    const bitmap = await createNativeImageBitmap(uri);
+    const texture = new THREE.Texture(bitmap);
+
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.flipY = false;
+    texture.magFilter = THREE.LinearFilter;
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.generateMipmaps = true;
+    texture.needsUpdate = true;
+
+    return texture;
+  } catch (error) {
+    console.warn('Failed to load police car texture', error);
+    return null;
+  }
+}
+
+function flipNativePoliceCarUvs(geometry: THREE.BufferGeometry) {
+  const uv = geometry.getAttribute('uv');
+
+  if (!uv) {
+    return;
+  }
+
+  for (let i = 0; i < uv.count; i += 1) {
+    uv.setY(i, 1 - uv.getY(i));
+  }
+
+  uv.needsUpdate = true;
+}
+
+function preparePoliceCarScene(scene: THREE.Group, nativeTexture: THREE.Texture | null) {
   scene.traverse((child) => {
-    if (child instanceof THREE.Mesh) {
-      child.castShadow = true;
-      child.receiveShadow = false;
+    const mesh = child as THREE.Mesh;
+
+    if (mesh.isMesh) {
+      mesh.castShadow = true;
+      mesh.receiveShadow = false;
 
       if (Platform.OS !== 'web') {
-        child.material = new THREE.MeshBasicMaterial({
-          vertexColors: true,
-          side: THREE.DoubleSide,
+        flipNativePoliceCarUvs(mesh.geometry);
+        mesh.geometry.deleteAttribute('color');
+
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+
+        materials.forEach((material) => {
+          material.side = THREE.DoubleSide;
+
+          if (nativeTexture) {
+            const mappedMaterial = material as THREE.MeshStandardMaterial;
+            mappedMaterial.map = nativeTexture;
+            mappedMaterial.vertexColors = false;
+            mappedMaterial.color.set(0xffffff);
+            mappedMaterial.metalness = 0;
+            mappedMaterial.roughness = 0.82;
+          }
+
+          material.needsUpdate = true;
         });
       }
     }
   });
 }
 
-function loadGltfScene(loader: GLTFLoader, uri: string) {
+function loadGltfScene(loader: GLTFLoader, uri: string, nativeTexture: THREE.Texture | null) {
   return new Promise<THREE.Group>((resolve, reject) => {
     loader.load(
       uri,
       (gltf) => {
         const scene = gltf.scene;
-        preparePoliceCarScene(scene);
+        preparePoliceCarScene(scene, nativeTexture);
         resolve(scene);
       },
       undefined,
@@ -57,12 +127,12 @@ function loadGltfScene(loader: GLTFLoader, uri: string) {
   });
 }
 
-async function loadFirstAvailableScene(loader: GLTFLoader, uris: string[]) {
+async function loadFirstAvailableScene(loader: GLTFLoader, uris: string[], nativeTexture: THREE.Texture | null) {
   let lastError: unknown;
 
   for (const uri of uris) {
     try {
-      return await loadGltfScene(loader, uri);
+      return await loadGltfScene(loader, uri, nativeTexture);
     } catch (error) {
       lastError = error;
     }
@@ -101,6 +171,7 @@ export default function Car() {
   const groupRef = useRef<THREE.Group>(null);
   const [modelScene, setModelScene] = useState<THREE.Group | null>(null);
   const [modelFailed, setModelFailed] = useState(false);
+  const modelScale = Platform.OS === 'web' ? POLICE_CAR_WEB_SCALE : POLICE_CAR_NATIVE_SCALE;
 
   useEffect(() => {
     let cancelled = false;
@@ -112,8 +183,8 @@ export default function Car() {
       loader.setDRACOLoader(dracoLoader);
     }
 
-    getPoliceCarModelUris()
-      .then((uris) => loadFirstAvailableScene(loader, uris))
+    Promise.all([getPoliceCarModelUris(), loadPoliceCarTexture()])
+      .then(([uris, texture]) => loadFirstAvailableScene(loader, uris, texture))
       .then((scene) => {
         if (!cancelled) {
           setModelScene(scene);
@@ -152,7 +223,7 @@ export default function Car() {
   return (
     <group ref={groupRef}>
       {modelScene ? (
-        <group rotation-y={POLICE_CAR_MODEL_ROTATION_Y} scale={POLICE_CAR_SCALE}>
+        <group rotation-y={POLICE_CAR_MODEL_ROTATION_Y} scale={modelScale}>
           <primitive object={modelScene} />
         </group>
       ) : null}

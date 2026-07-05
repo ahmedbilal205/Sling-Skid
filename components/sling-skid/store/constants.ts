@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 export const ROAD_WIDTH = 8;
 export const ROAD_HALF_WIDTH = ROAD_WIDTH / 2;
 
@@ -10,6 +12,15 @@ export const ARC_CONTROL_EXIT = 8;
 export const ARC_ZONE_RADIAL_SLACK = 4.8;
 
 export const CAR_Y = 0.3;
+export const POLICE_CAR_WEB_SCALE = 0.42;
+export const POLICE_CAR_NATIVE_SCALE = 0.9;
+export const POLICE_CAR_VISUAL_SCALE = Platform.OS === 'web' ? POLICE_CAR_WEB_SCALE : POLICE_CAR_NATIVE_SCALE;
+export const POLICE_CAR_BASE_NATIVE_SCALE = 0.72;
+export const POLICE_CAR_MODEL_HALF_WIDTH = 1.18;
+export const CAR_ROD_COLLISION_ALLOWANCE = Math.max(
+  0,
+  (POLICE_CAR_VISUAL_SCALE - POLICE_CAR_BASE_NATIVE_SCALE) * POLICE_CAR_MODEL_HALF_WIDTH,
+);
 
 export const SEGMENT_BUFFER_AHEAD = 15;
 export const SEGMENT_CULL_BEHIND = 5;

@@ -46,7 +46,7 @@ On native:
 - `SlingSkidGame.native.tsx` uses `WebGpuFiberCanvas`.
 - `WebGpuFiberCanvas` wraps `react-native-wgpu`'s canvas/context in a browser-like canvas adapter.
 - It creates a React Three Fiber root with `createRoot`, configures it with a `THREE.WebGPURenderer`, and calls `context.present()` after each render.
-- Native DPR is capped by the game at `Math.min(PixelRatio.get(), 1.5)` to reduce GPU cost.
+- Native DPR is capped by the game at `Math.min(PixelRatio.get(), 2)` to balance sharpness and GPU cost.
 
 Important config:
 
@@ -209,7 +209,7 @@ Only segments around the current segment index are rendered. The road uses insta
 - Web: `/models/police_car.glb` from `public`.
 - Native: `assets/models/police_car.native.glb` via `expo-asset`.
 
-Web uses `DRACOLoader` with decoder files in `public/draco/gltf/`. Native swaps GLB mesh materials to basic vertex-colored materials to improve compatibility with the native WebGPU stack. If model loading fails, a simple box fallback car is rendered.
+Web uses `DRACOLoader` with decoder files in `public/draco/gltf/`. Native uses a Draco-decoded copy of the model in `assets/models/police_car.native.glb` and assigns `assets/models/police_car.texture.jpg` at runtime to avoid React Native Blob URL limitations for embedded GLB textures. If model loading fails, a simple box fallback car is rendered.
 
 `Car.tsx` also advances the simulation every frame and applies runtime car position/heading to the car group.
 
@@ -311,4 +311,3 @@ To change UI:
 - The UI does not expose pause, settings, calibration, or accessibility options.
 - `endGameRuntime()` exists but normal game-over flow is usually triggered by off-road detection inside `stepGameRuntime()`.
 - Some WebGPU demo components remain in `components/webgpu/` for diagnostics but are not mounted by the main route.
-

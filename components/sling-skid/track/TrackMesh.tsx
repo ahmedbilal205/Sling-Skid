@@ -165,7 +165,7 @@ export default function TrackMesh() {
   return (
     <group>
       <RoadStrip color="#3f2a0f" pieces={roadPieces} width={ROAD_HALF_WIDTH * 2 + 2.8} y={ROAD_Y} />
-      <RoadStrip color="#1c1f23" pieces={roadPieces} width={ROAD_HALF_WIDTH * 2} y={ROAD_Y + 0.045} />
+      <RoadStrip color="#A8A8A8" pieces={roadPieces} width={ROAD_HALF_WIDTH * 2} y={ROAD_Y + 0.045} />
       <RoadStrip color="#f0f0f0" offset={ROAD_HALF_WIDTH - 0.15} pieces={roadPieces} width={0.24} y={ROAD_Y + 0.09} />
       <RoadStrip color="#f0f0f0" offset={-ROAD_HALF_WIDTH + 0.15} pieces={roadPieces} width={0.24} y={ROAD_Y + 0.09} />
       <RoadStrip color="#ffd736" pieces={roadPieces} width={0.14} y={ROAD_Y + 0.12} />
