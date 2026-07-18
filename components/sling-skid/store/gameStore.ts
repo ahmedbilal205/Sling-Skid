@@ -32,7 +32,7 @@ import {
   OFFROAD_GRACE_BONUS,
   CAR_ROD_COLLISION_ALLOWANCE,
 } from './constants';
-import { generateInitialTrack, generateNextSegment, isOnRoad } from '../track/trackGenerator';
+import { extendTrack, generateInitialTrack, isOnRoad } from '../track/trackGenerator';
 
 const defaultSwing: SwingState = {
   engaged: false,
@@ -558,14 +558,13 @@ export function stepGameRuntime(dt: number) {
   let newSegments = state.segments;
   const remaining = newSegments.length - newSegIdx;
   if (remaining < 15) {
-    const toAdd: TrackSegment[] = [];
-    let last = newSegments[newSegments.length - 1];
     const count = 15 - remaining + 2;
-    for (let i = 0; i < count; i++) {
-      last = generateNextSegment(last, newDistance);
-      toAdd.push(last);
-    }
-    newSegments = [...newSegments, ...toAdd];
+    const stableAheadCount = 4;
+    const backtrackableTail = Math.min(
+      6,
+      Math.max(0, newSegments.length - (newSegIdx + stableAheadCount)),
+    );
+    newSegments = extendTrack(newSegments, count, newDistance, backtrackableTail);
   }
 
   const arcAfter = resolveArcContext(
