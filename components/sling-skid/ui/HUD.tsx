@@ -2,6 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useThrottledGameSnapshot } from '../store/useThrottledGameSnapshot';
+import Speedometer from './Speedometer';
 import { uiStyles } from './styles';
 
 export default function HUD() {
@@ -15,7 +16,7 @@ export default function HUD() {
     multiplier,
     phase,
     score,
-    speedPercent,
+    speed,
     tensionBucket,
     turnsCompleted,
   } = useThrottledGameSnapshot((s) => ({
@@ -27,7 +28,7 @@ export default function HUD() {
     multiplier: s.multiplier,
     phase: s.phase,
     score: s.score,
-    speedPercent: Math.min((s.speed / 30) * 100, 100),
+    speed: s.speed,
     tensionBucket: Math.floor(s.swing.tension * 20),
     turnsCompleted: s.turnsCompleted,
   }));
@@ -52,30 +53,42 @@ export default function HUD() {
     >
       <View style={styles.topRow}>
         <View style={styles.sideItem}>
-          <Text style={[styles.value, uiStyles.shadowText]}>{distance}m</Text>
-          <Text style={styles.label}>Distance</Text>
+          <View style={styles.statAccent} />
+          <Text style={styles.label}>DIST.</Text>
+          <Text style={[styles.value, uiStyles.shadowText]}>{distance}<Text style={styles.valueUnit}>m</Text></Text>
         </View>
         {combo > 0 ? (
           <View style={styles.comboWrap}>
-            <Text style={[styles.combo, uiStyles.shadowText]}>x{multiplier}</Text>
+            <Text style={styles.comboLabel}>CHAIN</Text>
+            <Text style={styles.combo}>×{multiplier}</Text>
           </View>
         ) : null}
         <View style={[styles.sideItem, styles.rightItem]}>
+          <View style={[styles.statAccent, styles.rightAccent]} />
+          <Text style={styles.label}>SCORE</Text>
           <Text style={[styles.value, uiStyles.shadowText]}>{score.toLocaleString()}</Text>
-          <Text style={styles.label}>Score</Text>
         </View>
       </View>
 
       {!hasPulledIn && turnsCompleted < 3 ? (
-        <Text style={[styles.tapHint, uiStyles.shadowText]}>HOLD to pull in - RELEASE to float wide</Text>
+        <View style={styles.tapHintWrap}>
+          <Text style={styles.hintIndex}>01</Text>
+          <Text style={styles.tapHint}>HOLD TO CUT INSIDE</Text>
+          <View style={styles.tapHintRule} />
+          <Text style={styles.hintIndex}>02</Text>
+          <Text style={styles.tapHint}>LET GO TO SWING WIDE</Text>
+        </View>
       ) : null}
 
-      {lineReadout ? <Text style={[styles.lineReadout, uiStyles.shadowText]}>{lineReadout}</Text> : null}
+      {lineReadout ? (
+        <View style={styles.lineReadoutWrap}>
+          <Text style={styles.lineReadoutIndex}>LINE</Text>
+          <Text style={styles.lineReadout}>{lineReadout}</Text>
+        </View>
+      ) : null}
 
       <View style={[styles.bottomRow, { bottom: insets.bottom + 12 }]}>
-        <View style={styles.speedTrack}>
-          <View style={[styles.speedBar, { width: `${speedPercent}%` }]} />
-        </View>
+        <Speedometer speed={speed} />
       </View>
     </View>
   );
@@ -83,21 +96,35 @@ export default function HUD() {
 
 const styles = StyleSheet.create({
   bottomRow: {
-    left: 14,
-    position: 'absolute',
-    right: 14,
-  },
-  combo: {
-    color: '#ffd60a',
-    fontSize: 26,
-    fontWeight: '900',
-  },
-  comboWrap: {
     alignItems: 'center',
     left: 0,
     position: 'absolute',
     right: 0,
-    top: 4,
+  },
+  combo: {
+    color: '#181713',
+    fontSize: 27,
+    fontWeight: '900',
+    letterSpacing: -1.5,
+    lineHeight: 29,
+  },
+  comboLabel: {
+    color: '#181713',
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 1.3,
+  },
+  comboWrap: {
+    alignItems: 'center',
+    backgroundColor: '#f2cf45',
+    left: '50%',
+    marginLeft: -42,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    position: 'absolute',
+    top: 7,
+    transform: [{ rotate: '-2deg' }],
+    width: 84,
   },
   hud: {
     ...StyleSheet.absoluteFillObject,
@@ -105,48 +132,76 @@ const styles = StyleSheet.create({
     zIndex: 5,
   },
   label: {
-    color: 'rgba(255, 255, 255, 0.62)',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
+    color: '#f05a28',
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 1.5,
   },
   lineReadout: {
-    alignSelf: 'center',
-    color: 'rgba(255, 255, 255, 0.74)',
-    fontSize: 13,
-    fontWeight: '800',
+    color: '#f3eddc',
+    fontSize: 11,
+    fontWeight: '900',
     letterSpacing: 1,
-    position: 'absolute',
-    textAlign: 'center',
     textTransform: 'uppercase',
+  },
+  lineReadoutIndex: {
+    color: '#f05a28',
+    fontSize: 7,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  lineReadoutWrap: {
+    alignSelf: 'center',
+    borderLeftColor: '#f05a28',
+    borderLeftWidth: 3,
+    paddingLeft: 8,
+    position: 'absolute',
     top: '48%',
+  },
+  rightAccent: {
+    alignSelf: 'flex-end',
   },
   rightItem: {
     alignItems: 'flex-end',
   },
   sideItem: {
-    minWidth: 104,
+    minWidth: 96,
   },
-  speedBar: {
-    backgroundColor: '#4cc9f0',
-    borderRadius: 2,
-    height: 4,
+  statAccent: {
+    backgroundColor: '#f3eddc',
+    height: 3,
+    marginBottom: 5,
+    transform: [{ skewX: '-28deg' }],
+    width: 36,
   },
-  speedTrack: {
-    backgroundColor: 'rgba(255, 255, 255, 0.16)',
-    borderRadius: 2,
-    height: 4,
-    overflow: 'hidden',
+  hintIndex: {
+    color: '#f05a28',
+    fontSize: 8,
+    fontWeight: '900',
+    marginRight: 5,
   },
   tapHint: {
+    color: '#1b1a16',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  tapHintRule: {
+    backgroundColor: 'rgba(27, 26, 22, 0.28)',
+    height: 14,
+    marginHorizontal: 9,
+    width: 1,
+  },
+  tapHintWrap: {
+    alignItems: 'center',
     alignSelf: 'center',
-    color: 'rgba(255, 255, 255, 0.82)',
-    fontSize: 18,
-    fontWeight: '800',
+    backgroundColor: '#e7dfc9',
+    flexDirection: 'row',
+    paddingHorizontal: 11,
+    paddingVertical: 8,
     position: 'absolute',
-    textAlign: 'center',
     top: '40%',
+    transform: [{ rotate: '-1deg' }],
   },
   topRow: {
     alignItems: 'flex-start',
@@ -154,8 +209,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   value: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: '800',
+    color: '#f3eddc',
+    fontSize: 24,
+    fontVariant: ['tabular-nums'],
+    fontWeight: '900',
+    letterSpacing: -1.2,
+    lineHeight: 26,
+  },
+  valueUnit: {
+    color: '#aaa48f',
+    fontSize: 10,
+    letterSpacing: 0,
   },
 });
